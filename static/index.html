@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CitaSalud - Agenda tu cita</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">CitaSalud</p>
+        <h1>Reserva tu atención médica con una agenda profesional</h1>
+        <p>Consulta disponibilidad por día, elige una franja horaria y confirma tu cita en minutos.</p>
+      </div>
+    </header>
+
+    <section class="panel" id="login-panel">
+      <div class="panel-heading">
+        <h2>Operario</h2>
+        <span>Inicia sesión para acceder a la agenda</span>
+      </div>
+      <div id="login-block">
+        <form id="form-operario" class="stack">
+          <p>Ingresa tus credenciales de operario para continuar.</p>
+          <label>Correo<input type="email" id="operario-correo" required /></label>
+          <label>Contraseña<input type="password" id="operario-password" required minlength="6" /></label>
+          <button type="submit">Ingresar</button>
+        </form>
+        <button id="show-register" type="button" class="secondary">Registrar nuevo operario</button>
+        <p id="login-error" class="form-error hidden"></p>
+      </div>
+      <div id="register-block" class="hidden">
+        <form id="form-operario-register" class="stack">
+          <p>Registra un nuevo operario para el sistema.</p>
+          <label>Nombre<input type="text" id="operario-nombre" required /></label>
+          <label>Correo<input type="email" id="operario-reg-correo" required /></label>
+          <label>Contraseña<input type="password" id="operario-reg-password" required minlength="6" /></label>
+          <label>Teléfono<input type="text" id="operario-reg-telefono" /></label>
+          <button type="submit">Registrar operario</button>
+        </form>
+        <button id="show-login" type="button" class="secondary">Volver a login</button>
+        <p id="register-error" class="form-error hidden"></p>
+      </div>
+      <div id="operario-info" class="stack hidden">
+        <p id="operario-status">Sesión cerrada</p>
+        <div class="button-group">
+          <button id="operario-logout" type="button">Cerrar sesión</button>
+          <!-- El botón global de enviar recordatorios fue eliminado de aquí -->
+        </div>
+        <div id="reminder-results"></div>
+      </div>
+    </section>
+
+    <main class="grid hidden" id="app-shell">
+      <section class="panel">
+        <div class="panel-heading">
+          <h2>Nuevo paciente</h2>
+          <span>Registro rápido</span>
+        </div>
+        <form id="form-paciente" class="stack">
+          <label>Nombre<input type="text" id="paciente-nombre" required /></label>
+          <label>Teléfono (WhatsApp)<input type="text" id="paciente-telefono" required placeholder="Ej: 524491234567" /></label>
+          <button type="submit">Registrar paciente</button>
+        </form>
+      </section>
+
+      <section class="panel booking-panel">
+        <div class="panel-heading">
+          <h2>Nueva cita</h2>
+          <span>Horario de 08:00 a 21:00</span>
+        </div>
+        <form id="form-cita" class="stack">
+          <div class="select-group">
+            <label>Paciente<select id="paciente-select"></select></label>
+            <label>Médico<select id="medico-select"></select></label>
+          </div>
+          <div class="calendar-card">
+            <div class="calendar-toolbar">
+              <button type="button" id="prev-month">‹</button>
+              <strong id="calendar-title"></strong>
+              <button type="button" id="next-month">›</button>
+            </div>
+            <div id="calendar" class="calendar-grid"></div>
+          </div>
+          <div class="slot-card">
+            <div class="slot-heading">
+              <span>Horarios disponibles</span>
+              <strong id="selected-date-label">Selecciona un día</strong>
+            </div>
+            <div id="slots-grid" class="slots-grid"></div>
+          </div>
+          <label>Fecha<input type="date" id="cita-fecha" required /></label>
+          <label>Motivo<textarea id="cita-motivo" rows="3"></textarea></label>
+          <input type="hidden" id="cita-hora-inicio" />
+          <input type="hidden" id="cita-hora-fin" />
+          <button class="primary" type="submit">Confirmar cita</button>
+        </form>
+      </section>
+    </main>
+
+    <section class="panel hidden" id="agenda-section">
+      <div class="panel-heading">
+        <h2>Agenda reciente</h2>
+        <button id="btn-refresh" type="button">Refrescar</button>
+      </div>
+      <div id="resultado"></div>
+    </section>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

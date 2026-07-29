@@ -1,0 +1,14 @@
+
+# Entornos virtuales de Python
+.venv/
+.venv-1/
+.venv-2/
+env/
+venv/
+
+# Base de datos local
+citasalud.db
+
+# Archivos cacheados de Python
+__pycache__/
+*.pyc   
