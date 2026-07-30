@@ -10,7 +10,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.staticfiles import StaticFiles
-
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
@@ -20,10 +19,9 @@ from sqlalchemy.orm import Session, relationship, sessionmaker
 from apscheduler.schedulers.background import BackgroundScheduler
 
 # ---------------------
-# Credenciales de WhatsApp Meta API
+# Credenciales de WhatsApp Green API
 # ---------------------
-META_ACCESS_TOKEN = "EAATwUI4lJZBEBSAoJBm172tJ3PiAp8af0Sw6ReZBXgBHZAhkBtWBYPHag1M2HNfZCXF7ptqBRmjWNY5qGZAWTy1ngV2ZAPZAOeiZAY6ZCcEFWZCTPpOSE0BwcaeNZBpzGiZBpVvqvNHZA2BlHVAVbiJF84UppXEKApAvxQHgRCMmB3kPe0enPjzDY6lJIdMobC6Nc3QZCqfNJO8hkXSapZAq6orLBCMVhxnBBFPuN1HiSRNDfZBQTSfzBOL2DP3UzX9vghJKjjy8a0h9RzAeoJQEWyn4aLqEz8C6siBHLStncEDR6wZDZD"
-PHONE_NUMBER_ID = "1283685518150396"
+GREEN_API_URL = "https://7107.api.greenapi.com/waInstance710722697464/sendMessage/7ea70a0d63ac4cfc8f9ce9d9f81e76a12e0033f9534e48a680"
 WEBHOOK_VERIFY_TOKEN = "citasalud_token_seguro_123"
 
 # ---------------------
@@ -48,7 +46,6 @@ class Usuario(Base):
     telefono = Column(String, nullable=True)
     activo = Column(Integer, nullable=False, default=1)
     recuperacion_token = Column(String, nullable=True)
-
     citas_paciente = relationship("Cita", back_populates="paciente", foreign_keys="Cita.paciente_id")
     citas_medico = relationship("Cita", back_populates="medico", foreign_keys="Cita.medico_id")
 
@@ -62,7 +59,6 @@ class Cita(Base):
     hora_fin = Column(Time, nullable=False)
     motivo = Column(String, nullable=True)
     estado = Column(String, nullable=False, default="pendiente")
-
     paciente = relationship("Usuario", back_populates="citas_paciente", foreign_keys=[paciente_id])
     medico = relationship("Usuario", back_populates="citas_medico", foreign_keys=[medico_id])
 
@@ -74,7 +70,6 @@ LOGIN_WINDOW_MINUTES = 15
 
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/token")
-
 failed_login_attempts: dict[tuple[str, str], list[datetime]] = {}
 
 def _to_minutes(value: time) -> int:
@@ -129,7 +124,6 @@ def migrate_database():
             except sqlite3.OperationalError:
                 cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
                 conn.commit()
-
 Base.metadata.create_all(bind=engine)
 migrate_database()
 
@@ -137,10 +131,9 @@ migrate_database()
 # Tareas Programadas (Cron Jobs)
 # ---------------------
 def enviar_recordatorios_diarios():
-    """Busca todas las citas de mañana y envía un WhatsApp automáticamente."""
+    """Busca todas las citas de mañana y envía un WhatsApp automáticamente mediante Green API."""
     db = SessionLocal()
     try:
-        # Usamos datetime.now() local para evitar desajustes de zona horaria (UTC vs CST)
         manana = (datetime.now().date() + timedelta(days=1))
         
         citas_manana = db.query(Cita).filter(
@@ -151,32 +144,18 @@ def enviar_recordatorios_diarios():
         for cita in citas_manana:
             paciente = db.query(Usuario).filter(Usuario.id == cita.paciente_id).first()
             if paciente and paciente.telefono:
-                url = f"https://graph.facebook.com/v25.0/{PHONE_NUMBER_ID}/messages"
-                headers = {
-                    "Authorization": f"Bearer {META_ACCESS_TOKEN}",
-                    "Content-Type": "application/json"
-                }
+                numero_whatsapp = f"52{paciente.telefono}@c.us"
+                texto_mensaje = f"Hola, Cita Salud te recuerda que tienes una cita médica confirmada para mañana {cita.fecha} a las {cita.hora_inicio.strftime('%H:%M')}. ¡Te esperamos!"
+                
                 payload = {
-                    "messaging_product": "whatsapp",
-                    "to": paciente.telefono,
-                    "type": "template",
-                    "template": {
-                        "name": "recordatorio_cita",
-                        "language": {"code": "es"}, # Corregido a 'es' en lugar de 'es_MX'
-                        "components": [
-                            {
-                                "type": "body",
-                                "parameters": [
-                                    {"type": "text", "text": str(cita.fecha)},
-                                    {"type": "text", "text": str(cita.hora_inicio.strftime('%H:%M'))}
-                                ]
-                            }
-                        ]
-                    }
+                    "chatId": numero_whatsapp,
+                    "message": texto_mensaje
                 }
-                response = requests.post(url, json=payload, headers=headers)
+                headers = {'Content-Type': 'application/json'}
+                
+                response = requests.post(GREEN_API_URL, json=payload, headers=headers)
                 if response.status_code != 200:
-                    print(f"Error cron WhatsApp Meta: {response.text}")
+                    print(f"Error cron WhatsApp Green API: {response.text}")
     finally:
         db.close()
 
@@ -191,7 +170,6 @@ class UsuarioCreate(BaseModel):
     telefono: Optional[str] = None
 
 class PacienteCreate(BaseModel):
-    """Esquema simplificado solo para pacientes (nombre y teléfono)"""
     nombre: str = Field(..., min_length=3)
     telefono: str = Field(..., min_length=10)
 
@@ -202,7 +180,6 @@ class UsuarioRead(BaseModel):
     rol: str
     especialidad: Optional[str] = None
     telefono: Optional[str] = None
-
     model_config = {"from_attributes": True}
 
 class CitaCreate(BaseModel):
@@ -246,7 +223,6 @@ class CitaRead(BaseModel):
     hora_fin: time
     motivo: Optional[str]
     estado: str
-
     model_config = {"from_attributes": True}
 
 # ---------------------
@@ -291,10 +267,8 @@ def seed_default_users(db: Session) -> None:
 def startup_event():
     with SessionLocal() as db:
         seed_default_users(db)
-    
-    # Iniciar el programador de tareas para los recordatorios diarios
+        
     scheduler = BackgroundScheduler()
-    # Programado para ejecutarse todos los días a las 10:00 AM local
     scheduler.add_job(enviar_recordatorios_diarios, 'cron', hour=10, minute=0)
     scheduler.start()
 
@@ -339,7 +313,6 @@ def get_current_active_operario(current_user: Usuario = Depends(get_current_user
 # ---------------------
 @app.post("/usuarios", response_model=UsuarioRead, status_code=201)
 def crear_usuario(paciente: PacienteCreate, db: Session = Depends(get_db), current_user: Usuario = Depends(get_current_active_operario)):
-    """Registra un nuevo paciente usando SOLAMENTE nombre y teléfono."""
     correo_falso = f"paciente_{uuid4().hex[:8]}@citasalud.com"
     nuevo_usuario = Usuario(
         nombre=paciente.nombre,
@@ -436,11 +409,11 @@ def recuperar_password(request_data: PasswordRecoveryRequest, db: Session = Depe
     return {"detail": "Correo de recuperación enviado", "token": token}
 
 # ---------------------
-# Endpoints de WhatsApp Meta API
+# Endpoints de WhatsApp Green API
 # ---------------------
 @app.post("/whatsapp/remind/{cita_id}")
 def enviar_recordatorio_individual(cita_id: int, db: Session = Depends(get_db), current_user: Usuario = Depends(get_current_active_operario)):
-    """Envía un recordatorio de WhatsApp a una cita en específico de forma manual."""
+    """Envía un recordatorio de WhatsApp a una cita en específico de forma manual mediante Green API."""
     cita = db.query(Cita).filter(Cita.id == cita_id).first()
     if not cita:
         raise HTTPException(status_code=404, detail="Cita no encontrada")
@@ -449,49 +422,34 @@ def enviar_recordatorio_individual(cita_id: int, db: Session = Depends(get_db), 
     if not paciente or not paciente.telefono:
         raise HTTPException(status_code=400, detail="El paciente de esta cita no tiene un número de teléfono registrado")
     
-    url = f"https://graph.facebook.com/v25.0/{PHONE_NUMBER_ID}/messages"
-    headers = {
-        "Authorization": f"Bearer {META_ACCESS_TOKEN}",
-        "Content-Type": "application/json"
-    }
-    
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": paciente.telefono,
-        "type": "template",
-        "template": {
-            "name": "recordatorio_cita",
-            "language": {"code": "es"}, # Corregido de 'es_MX' a 'es'
-            "components": [
-                {
-                    "type": "body",
-                    "parameters": [
-                        {"type": "text", "text": str(cita.fecha)},
-                        {"type": "text", "text": str(cita.hora_inicio.strftime('%H:%M'))}
-                    ]
-                }
-            ]
-        }
-    }
-    
-    response = requests.post(url, json=payload, headers=headers)
-    if response.status_code == 200:
-        return {"detail": "¡WhatsApp enviado con éxito!"}
-    else:
-        # Extraemos y mandamos el mensaje real del servidor de Meta
-        try:
-            error_data = response.json()
-        except Exception:
-            error_data = response.text
-        raise HTTPException(status_code=400, detail=f"Error de Meta: {error_data}")
+    # Formatear el número para Green API (código de país + número + sufijo)
+    numero_whatsapp = f"52{paciente.telefono}@c.us"
+    texto_mensaje = f"Hola, Cita Salud te recuerda que tienes una cita médica confirmada para el {cita.fecha} a las {cita.hora_inicio.strftime('%H:%M')}. ¡Te esperamos!"
 
+    payload = {
+        "chatId": numero_whatsapp,
+        "message": texto_mensaje
+    }
+    
+    headers = {
+        'Content-Type': 'application/json'
+    }
+
+    try:
+        response = requests.post(GREEN_API_URL, json=payload, headers=headers)
+        if response.status_code == 200:
+            return {"detail": "¡Recordatorio enviado con éxito!"}
+        else:
+            raise HTTPException(status_code=400, detail=f"Error al enviar mensaje: {response.text}")
+    except Exception as e:
+         raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
 
 @app.get("/whatsapp/webhook")
 def verify_webhook(request: Request):
+    """Mantenido por si en el futuro se configura un Webhook en Green API"""
     mode = request.query_params.get("hub.mode")
     token = request.query_params.get("hub.verify_token")
     challenge = request.query_params.get("hub.challenge")
-
     if mode and token:
         if mode == "subscribe" and token == WEBHOOK_VERIFY_TOKEN:
             return int(challenge)
@@ -499,6 +457,7 @@ def verify_webhook(request: Request):
 
 @app.post("/whatsapp/webhook")
 async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
+    """Mantenido para procesamiento de mensajes entrantes (requeriría adaptarlo a la estructura JSON de Green API)"""
     body = await request.json()
     try:
         entry = body['entry'][0]
@@ -512,7 +471,6 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
             
             paciente = db.query(Usuario).filter(Usuario.telefono == telefono_paciente).first()
             if paciente:
-                # Usamos datetime.now() en lugar de utcnow() para evitar saltos de día erróneos
                 manana = (datetime.now().date() + timedelta(days=1))
                 cita = db.query(Cita).filter(Cita.paciente_id == paciente.id, Cita.fecha == manana).first()
                 
@@ -529,7 +487,6 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
     
     return {"status": "ok"}
 
-
 @app.get("/operarios", response_model=List[UsuarioRead])
 def listar_operarios(db: Session = Depends(get_db), current_user: Usuario = Depends(get_current_active_operario)):
     return db.query(Usuario).filter(Usuario.rol == "operario").all()
@@ -537,7 +494,6 @@ def listar_operarios(db: Session = Depends(get_db), current_user: Usuario = Depe
 @app.get("/operario/me", response_model=UsuarioRead)
 def obtener_operario_actual(current_user: Usuario = Depends(get_current_active_operario)):
     return current_user
-
 
 @app.post("/citas/{cita_id}/cancelar")
 def cancelar_cita(cita_id: int, db: Session = Depends(get_db), current_user: Usuario = Depends(get_current_active_operario)):
@@ -558,11 +514,9 @@ def eliminar_cita(cita_id: int, db: Session = Depends(get_db), current_user: Usu
     db.commit()
     return {"detail": "Cita eliminada", "cita_id": cita_id}
 
-
 @app.get("/medicos", response_model=List[UsuarioRead])
 def listar_medicos(db: Session = Depends(get_db), current_user: Usuario = Depends(get_current_active_operario)):
     return db.query(Usuario).filter(Usuario.rol == "medico").all()
-
 
 # ---------------------
 # Endpoints de citas
@@ -579,14 +533,12 @@ def crear_cita(cita: CitaCreate, db: Session = Depends(get_db), current_user: Us
     
     nuevo_inicio = _to_minutes(cita.hora_inicio)
     nuevo_fin = _to_minutes(cita.hora_fin)
-
     citas_existentes = db.query(Cita).filter(Cita.medico_id == cita.medico_id, Cita.fecha == cita.fecha).all()
     
     conflicto = any(
         _to_minutes(existing.hora_inicio) < nuevo_fin and nuevo_inicio < _to_minutes(existing.hora_fin)
         for existing in citas_existentes
     )
-
     if conflicto:
         raise HTTPException(status_code=400, detail="El médico ya tiene una cita en ese horario")
     
