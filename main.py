@@ -46,6 +46,7 @@ class Usuario(Base):
     telefono = Column(String, nullable=True)
     activo = Column(Integer, nullable=False, default=1)
     recuperacion_token = Column(String, nullable=True)
+    
     citas_paciente = relationship("Cita", back_populates="paciente", foreign_keys="Cita.paciente_id")
     citas_medico = relationship("Cita", back_populates="medico", foreign_keys="Cita.medico_id")
 
@@ -59,6 +60,7 @@ class Cita(Base):
     hora_fin = Column(Time, nullable=False)
     motivo = Column(String, nullable=True)
     estado = Column(String, nullable=False, default="pendiente")
+    
     paciente = relationship("Usuario", back_populates="citas_paciente", foreign_keys=[paciente_id])
     medico = relationship("Usuario", back_populates="citas_medico", foreign_keys=[medico_id])
 
@@ -124,6 +126,7 @@ def migrate_database():
             except sqlite3.OperationalError:
                 cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
                 conn.commit()
+
 Base.metadata.create_all(bind=engine)
 migrate_database()
 
@@ -144,7 +147,7 @@ def enviar_recordatorios_diarios():
         for cita in citas_manana:
             paciente = db.query(Usuario).filter(Usuario.id == cita.paciente_id).first()
             if paciente and paciente.telefono:
-                numero_whatsapp = f"52{paciente.telefono}@c.us"
+                numero_whatsapp = f"521{paciente.telefono}@c.us"
                 texto_mensaje = f"Hola, Cita Salud te recuerda que tienes una cita médica confirmada para mañana {cita.fecha} a las {cita.hora_inicio.strftime('%H:%M')}. ¡Te esperamos!"
                 
                 payload = {
@@ -180,6 +183,7 @@ class UsuarioRead(BaseModel):
     rol: str
     especialidad: Optional[str] = None
     telefono: Optional[str] = None
+
     model_config = {"from_attributes": True}
 
 class CitaCreate(BaseModel):
@@ -223,6 +227,7 @@ class CitaRead(BaseModel):
     hora_fin: time
     motivo: Optional[str]
     estado: str
+
     model_config = {"from_attributes": True}
 
 # ---------------------
@@ -314,6 +319,7 @@ def get_current_active_operario(current_user: Usuario = Depends(get_current_user
 @app.post("/usuarios", response_model=UsuarioRead, status_code=201)
 def crear_usuario(paciente: PacienteCreate, db: Session = Depends(get_db), current_user: Usuario = Depends(get_current_active_operario)):
     correo_falso = f"paciente_{uuid4().hex[:8]}@citasalud.com"
+    
     nuevo_usuario = Usuario(
         nombre=paciente.nombre,
         correo=correo_falso,
@@ -348,6 +354,7 @@ def register_operario(operario: UsuarioCreate, db: Session = Depends(get_db)):
     existing = db.query(Usuario).filter(Usuario.correo == operario.correo).first()
     if existing:
         raise HTTPException(status_code=400, detail="El correo ya está registrado")
+
     nuevo_operario = Usuario(
         nombre=operario.nombre,
         correo=operario.correo,
@@ -373,26 +380,30 @@ class PasswordRecoveryRequest(BaseModel):
 @app.post("/token", response_model=Token)
 async def login_for_access_token(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     client_ip = request.client.host if request.client else "unknown"
+    
     if _is_login_blocked(form_data.username, client_ip):
         raise HTTPException(status_code=429, detail="Demasiados intentos. Intenta más tarde.")
+
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
         _record_failed_login(form_data.username, client_ip)
         raise HTTPException(status_code=401, detail="Correo o contraseña inválida", headers={"WWW-Authenticate": "Bearer"})
+
     access_token = create_access_token(data={"sub": user.correo})
     return {"access_token": access_token, "token_type": "bearer"}
 
 @app.post("/login", response_model=Token)
 def login_with_json(request: Request, login: TokenRequest, db: Session = Depends(get_db)):
     client_ip = request.client.host if request.client else "unknown"
+    
     if _is_login_blocked(login.correo, client_ip):
         raise HTTPException(status_code=429, detail="Demasiados intentos. Intenta más tarde.")
-    
+        
     user = authenticate_user(db, login.correo, login.contrasena)
     if not user:
         _record_failed_login(login.correo, client_ip)
         raise HTTPException(status_code=401, detail="Correo o contraseña inválida")
-    
+        
     access_token = create_access_token(data={"sub": user.correo})
     return {"access_token": access_token, "token_type": "bearer"}
 
@@ -401,11 +412,12 @@ def recuperar_password(request_data: PasswordRecoveryRequest, db: Session = Depe
     usuario = get_user_by_email(db, request_data.correo)
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    
+        
     token = str(uuid4())
     usuario.recuperacion_token = token
     db.add(usuario)
     db.commit()
+
     return {"detail": "Correo de recuperación enviado", "token": token}
 
 # ---------------------
@@ -417,13 +429,13 @@ def enviar_recordatorio_individual(cita_id: int, db: Session = Depends(get_db), 
     cita = db.query(Cita).filter(Cita.id == cita_id).first()
     if not cita:
         raise HTTPException(status_code=404, detail="Cita no encontrada")
-    
+        
     paciente = db.query(Usuario).filter(Usuario.id == cita.paciente_id).first()
     if not paciente or not paciente.telefono:
         raise HTTPException(status_code=400, detail="El paciente de esta cita no tiene un número de teléfono registrado")
-    
+        
     # Formatear el número para Green API (código de país + número + sufijo)
-    numero_whatsapp = f"52{paciente.telefono}@c.us"
+    numero_whatsapp = f"521{paciente.telefono}@c.us"
     texto_mensaje = f"Hola, Cita Salud te recuerda que tienes una cita médica confirmada para el {cita.fecha} a las {cita.hora_inicio.strftime('%H:%M')}. ¡Te esperamos!"
 
     payload = {
@@ -441,8 +453,8 @@ def enviar_recordatorio_individual(cita_id: int, db: Session = Depends(get_db), 
             return {"detail": "¡Recordatorio enviado con éxito!"}
         else:
             raise HTTPException(status_code=400, detail=f"Error al enviar mensaje: {response.text}")
-    except Exception as e:
-         raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+    except Exception as e: 
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
 
 @app.get("/whatsapp/webhook")
 def verify_webhook(request: Request):
@@ -450,6 +462,7 @@ def verify_webhook(request: Request):
     mode = request.query_params.get("hub.mode")
     token = request.query_params.get("hub.verify_token")
     challenge = request.query_params.get("hub.challenge")
+
     if mode and token:
         if mode == "subscribe" and token == WEBHOOK_VERIFY_TOKEN:
             return int(challenge)
@@ -459,6 +472,7 @@ def verify_webhook(request: Request):
 async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
     """Mantenido para procesamiento de mensajes entrantes (requeriría adaptarlo a la estructura JSON de Green API)"""
     body = await request.json()
+    
     try:
         entry = body['entry'][0]
         changes = entry['changes'][0]
@@ -470,6 +484,7 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
             texto_respuesta = message['text']['body'].strip()
             
             paciente = db.query(Usuario).filter(Usuario.telefono == telefono_paciente).first()
+            
             if paciente:
                 manana = (datetime.now().date() + timedelta(days=1))
                 cita = db.query(Cita).filter(Cita.paciente_id == paciente.id, Cita.fecha == manana).first()
@@ -479,12 +494,12 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
                         cita.estado = "confirmada"
                     elif texto_respuesta == "2":
                         cita.estado = "cancelada"
-                    
+                        
                     db.add(cita)
                     db.commit()
     except KeyError:
         pass
-    
+        
     return {"status": "ok"}
 
 @app.get("/operarios", response_model=List[UsuarioRead])
@@ -500,6 +515,7 @@ def cancelar_cita(cita_id: int, db: Session = Depends(get_db), current_user: Usu
     cita = db.query(Cita).filter(Cita.id == cita_id).first()
     if not cita:
         raise HTTPException(status_code=404, detail="Cita no encontrada")
+
     cita.estado = "cancelada"
     db.add(cita)
     db.commit()
@@ -510,6 +526,7 @@ def eliminar_cita(cita_id: int, db: Session = Depends(get_db), current_user: Usu
     cita = db.query(Cita).filter(Cita.id == cita_id).first()
     if not cita:
         raise HTTPException(status_code=404, detail="Cita no encontrada")
+
     db.delete(cita)
     db.commit()
     return {"detail": "Cita eliminada", "cita_id": cita_id}
@@ -530,18 +547,20 @@ def crear_cita(cita: CitaCreate, db: Session = Depends(get_db), current_user: Us
         raise HTTPException(status_code=404, detail="Médico no encontrado o no es un médico válido")
     if not paciente:
         raise HTTPException(status_code=404, detail="Paciente no encontrado o no es un paciente válido")
-    
+        
     nuevo_inicio = _to_minutes(cita.hora_inicio)
     nuevo_fin = _to_minutes(cita.hora_fin)
+
     citas_existentes = db.query(Cita).filter(Cita.medico_id == cita.medico_id, Cita.fecha == cita.fecha).all()
     
     conflicto = any(
         _to_minutes(existing.hora_inicio) < nuevo_fin and nuevo_inicio < _to_minutes(existing.hora_fin)
         for existing in citas_existentes
     )
+
     if conflicto:
         raise HTTPException(status_code=400, detail="El médico ya tiene una cita en ese horario")
-    
+        
     nueva_cita = Cita(
         paciente_id=cita.paciente_id,
         medico_id=cita.medico_id,
